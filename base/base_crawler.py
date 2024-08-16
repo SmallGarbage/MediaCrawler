@@ -21,3 +21,21 @@ class AbstractCrawler(ABC):
     async def launch_browser(self, chromium: BrowserType, playwright_proxy: Optional[Dict], user_agent: Optional[str],
                              headless: bool = True) -> None:
         pass
+
+
+class AbstractLogin(ABC):
+    @abstractmethod
+    async def begin(self):
+        pass
+
+    @abstractmethod
+    async def login_by_qrcode(self):
+        pass
+
+    @abstractmethod
+    async def login_by_mobile(self):
+        pass
+
+    @abstractmethod
+    async def login_by_cookies(self):
+        pass
