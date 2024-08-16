@@ -1,5 +1,6 @@
 import asyncio
 import os.path
+import random
 
 import config
 from base.base_crawler import AbstractCrawler
@@ -10,6 +11,8 @@ from playwright.async_api import async_playwright, BrowserType, BrowserContext
 from .client import XHSClient
 from .login import XHSLogin
 from .field import SearchNoteType, SearchSortType
+from store import xhs as xhs_store
+from asyncio import Task
 
 
 class XiaoHongShuCrawler(AbstractCrawler):
@@ -144,6 +147,12 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     if post_item.get('model_type') not in ('rec_query', 'hot_query')
                 ]
                 mote_details = await asyncio.gather(*task_list)
+                for note_detail in mote_details:
+                    if note_detail is not None:
+                        await xhs_store.update_xhs_note(note_detail)
+                        note_id_list.append(note_detail.get("note_id"))
+                page += 1
+                await self.batch_get_note_comments(note_id_list)
 
     async def get_note_detail(self, note_id: str, semaphore: asyncio.Semaphore) -> Optional[Dict]:
         """get note detail"""
@@ -152,3 +161,21 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 return await self.xhs_client.get_note_by_id(note_id)
             except KeyError as ex:
                 return None
+
+    async def batch_get_note_comments(self, note_list: List[str]):
+        if not config.ENABLE_GET_COMMENTS:
+            return
+        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+        task_list: List[Task] = []
+        for note_id in note_list:
+            task = asyncio.create_task(self.get_comments(note_id, semaphore), name=note_id)
+            task_list.append(task)
+        await asyncio.gather(*task_list)
+
+    async def get_comments(self, note_id: str, semaphore: asyncio.Semaphore):
+        async with semaphore:
+            await self.xhs_client.get_note_all_comments(
+                note_id=note_id,
+                crawl_interval=random.random(),
+                callback=xhs_store.batch_update_xhs_note_comments
+            )

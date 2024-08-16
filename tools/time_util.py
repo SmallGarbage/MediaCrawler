@@ -13,3 +13,7 @@ def get_unix_time_from_time_str(time_str):
     except Exception as e:
         return 0
     pass
+
+
+def get_current_timestamp() -> int:
+    return int(time.time() * 1000)

@@ -1,6 +1,7 @@
+import asyncio
 import json
-from typing import Dict, Any, Union
-
+from typing import Dict, Any, Union, Optional, Callable, List
+from urllib.parse import urlencode
 import httpx
 from playwright.async_api import Page, BrowserContext
 from .field import SearchNoteType, SearchSortType
@@ -117,3 +118,58 @@ class XHSClient:
             res_dict: Dict = res["items"][0]["note_card"]
             return res_dict
         return dict()
+
+    async def get_note_all_comments(self, note_id: str, crawl_interval: float = 1.0,
+                                    callback: Optional[Callable] = None) -> List[Dict]:
+        """
+        获取指定笔记下的所有一级评论，该方法会一直查找一个帖子下的所有评论信息
+        :param note_id:
+        :param crawl_interval:
+        :param callback:
+        :return:
+        """
+        result = []
+        comments_has_more = True
+        comments_cursor = ""
+        while comments_has_more:
+            comments_res = await self.get_note_comments(note_id, comments_cursor)
+            comments_has_more = comments_res.get("has_more", False)
+            comments_cursor = comments_res.get("cursor", "")
+            if "comments" not in comments_res:
+                break
+            comments = comments_res["comments"]
+            if callback:
+                await callback(note_id, comments)
+            await asyncio.sleep(crawl_interval)
+            result.extend(comments)
+        return result
+
+    async def get_note_comments(self, note_id: str, cursor: str = "") -> Dict:
+        """
+        获取一级评论的API
+        :param note_id: 笔记ID
+        :param cursor:  分页游标
+        :return:
+        """
+        uri = "/api/sns/web/v2/comment/page"
+        params = {
+            "note_id": note_id,
+            "cursor": cursor,
+            "top_comment_id": "",
+            "image_formats": "jpg,webp,avif"
+        }
+        return await self.get(uri, params)
+
+    async def get(self, uri: str, params=None) -> Dict:
+        """
+        GET请求，对请求头签名
+        :param uri: 请求路由
+        :param params:  请求参数
+        :return:
+        """
+        final_uri = uri
+        if isinstance(params, dict):
+            final_uri = (f"{uri}?"
+                         f"{urlencode(params)}")
+        headers = await self._pre_headers(final_uri)
+        return await self.request(method="GET", url=f"{self._host}{final_uri}", headers=headers)
