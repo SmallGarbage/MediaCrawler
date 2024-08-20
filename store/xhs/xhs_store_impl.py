@@ -1,3 +1,10 @@
+import asyncio
+import csv
+import json
+import pathlib
+import os
+import aiofiles
+
 from base.base_crawler import AbstractStore
 from typing import Dict
 from tools import utils
@@ -41,17 +48,50 @@ class XhsDbStoreImplement(AbstractStore):
 
 
 class XhsCsvStoreImplement(AbstractStore):
+    csv_store_path: str = "data/xhs"
+
+    def make_save_file_name(self, store_type: str) -> str:
+        return f"{self.csv_store_path}/{store_type}_{utils.get_current_date()}.csv"
+
+    async def save_data_to_csv(self, save_item: Dict, store_type: str):
+        pathlib.Path(self.csv_store_path).mkdir(parents=True, exist_ok=True)
+        save_file_name = self.make_save_file_name(store_type=store_type)
+        async with aiofiles.open(save_file_name, mode='a+', encoding='utf-8-sig', newline='') as f:
+            f.fileno()
+            writer = csv.writer(f)
+            if await f.tell() == 0:
+                await writer.writerow(save_item.keys())
+            await writer.writerow(save_item.values())
+
     async def store_comment(self, comment_item: Dict):
-        pass
+        await self.save_data_to_csv(save_item=comment_item, store_type='contents')
 
     async def store_content(self, content_item: Dict):
-        pass
+        await self.save_data_to_csv(save_item=content_item, store_type='comments')
 
     async def store_creator(self, creator: Dict):
-        pass
+        await self.save_data_to_csv(save_item=creator, store_type='creator')
 
 
 class XhsJsonStoreImplement(AbstractStore):
+    json_store_path: str = "data/xhs"
+    lock = asyncio.Lock()
+
+    def make_save_file_name(self, store_type: str) -> str:
+        return f"{self.csv_store_path}/{store_type}_{utils.get_current_date()}.csv"
+
+    async def save_data_to_json(self, save_item: Dict, store_type: str):
+        pathlib.Path(self.json_store_path).mkdir(parents=True, exist_ok=True)
+        save_file_name = self.make_save_file_name(store_type=store_type)
+        save_data = []
+        async with self.lock:
+            if os.path.exists(save_file_name):
+                async with aiofiles.open(save_file_name, 'r', encoding='utf-8') as file:
+                    save_data = json.loads(await file.read())
+            save_data.append(save_data)
+            async with aiofiles.open(save_file_name, 'w', encoding='utf-8') as file:
+                await file.write(json.dumps(save_data, ensure_ascii=False))
+
     async def store_comment(self, comment_item: Dict):
         pass
 

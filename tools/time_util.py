@@ -17,3 +17,7 @@ def get_unix_time_from_time_str(time_str):
 
 def get_current_timestamp() -> int:
     return int(time.time() * 1000)
+
+
+def get_current_date() -> str:
+    return time.strftime('%Y-%m-%d', time.localtime())
